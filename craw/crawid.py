@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 #爬取日韩料理排行榜页面店铺id等
 import xlrd
-import xlwt
+import xlwt  #对Excel文件进行操作
 import json
 import requests
 from xlutils.copy import copy
 
-workbook = xlwt.Workbook()
-workbook.add_sheet('日料')
+workbook = xlwt.Workbook()#新建文件
+workbook.add_sheet('日料')#增加sheet 日料
 workbook.save('日料.xls')
 list_ = ['商铺', 'ID', '分数', '地址']
 for i in range(0, 4):
@@ -17,7 +17,7 @@ for i in range(0, 4):
     row_old = worksheet.nrows
     new_workbook = copy(workbook)
     new_worksheet = new_workbook.get_sheet(0)
-    new_worksheet.write(0, i, list_[i])
+    new_worksheet.write(0, i, list_[i])#按顺序在表中写入数据
     new_workbook.save('日料.xls')
 
 headers = {"Origin": "https://wh.meituan.com",
@@ -30,7 +30,7 @@ for number in range(0, 32):
             number * 32),
         headers=headers)
     ret = json.loads(response.content.decode())
-
+#将从网页爬取信息写入xls文件
     for id_ in ret['data']['searchResult']:
         print('正在写入:', id_['title'], '------', id_['id'], '------', id_['avgscore'], '------', id_['address'])
         workbook = xlrd.open_workbook('日料.xls', encoding_override='utf-8')
@@ -39,8 +39,8 @@ for number in range(0, 32):
         row_old = worksheet.nrows
         new_workbook = copy(workbook)
         new_worksheet = new_workbook.get_sheet(0)
-        new_worksheet.write(row_old, 0, id_['title'])
-        new_worksheet.write(row_old, 1, id_['id'])
-        new_worksheet.write(row_old, 2, id_['avgscore'])
-        new_worksheet.write(row_old, 3, id_['address'])
+        new_worksheet.write(row_old, 0, id_['title'])#店铺名称
+        new_worksheet.write(row_old, 1, id_['id'])#店铺ID
+        new_worksheet.write(row_old, 2, id_['avgscore'])#店铺评分
+        new_worksheet.write(row_old, 3, id_['address'])#店铺地址
         new_workbook.save('日料.xls')
