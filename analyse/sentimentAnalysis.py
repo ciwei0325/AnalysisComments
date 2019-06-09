@@ -1,86 +1,115 @@
-import jieba
+# -*- coding: utf-8 -*-
+
+import pickle
 import numpy as np
 import pandas as pd
-import joblib
-import csv
-from sklearn.model_selection import cross_val_score
-from sklearn.svm import SVC
-from gensim.models.word2vec import Word2Vec
+from keras.utils import np_utils, plot_model # 实现神经网络可视化
+from keras.models import Sequential
+from keras.preprocessing.sequence import pad_sequences # 填充 实现文本预处理
+from keras.layers import LSTM, Dense, Embedding, Dropout
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score # 模型评估
+from keras.models import load_model # 保存和加载模型
+# graphviz安装不顺利，添加安装graphviz的路径
+import os
+os.environ["PATH"] += os.pathsep + 'C:/Users/Bell599/graphviz/bin'
 
-#  读取参考评论集
-neg=pd.read_csv('F:/此处为1星评论集',header=None,low_memory=False)
-pos=pd.read_csv('F:/此处为5星评论集',header=None,low_memory=False)
 
-#  分词
-neg['words']=neg[0].apply(lambda x: jieba.lcut(x))
-pos['words']=pos[0].apply(lambda x: jieba.lcut(x))
 
-x=np.concatenate((pos['words'],neg['words']))
-y=np.concatenate((np.ones(len(pos)),np.zeros(len(neg))))
+# 导入数据
+# 文件的数据中，特征为comment, 类别为star.
+def load_data(filepath, input_shape=20):
+    df = pd.read_csv(filepath)
 
-#  构造向量空间
-w2v=Word2Vec(size=300,min_count=10)
-w2v.build_vocab(x)
-w2v.train(x,total_examples=w2v.corpus_count,epochs=w2v.iter)
-w2v.save('w2v_model.pkl')
+    # 标签及词汇表
+    labels, vocabulary = list(df['star'].unique()), list(df['comment'].unique())
 
-#  获取一句话的向量
-def total_vec(words):
-    vec=np.zeros(300).reshape((1,300))
-    for word in words:
-        try:
-            vec+=w2v.wv[word].reshape((1,300))
-        except KeyError:
-            continue
-    return vec
+    # 构造字符级的特征
+    string = ''
+    for word in vocabulary:
+        string += word
 
-#  获得结果向量空间
-train_vec=np.concatenate([total_vec(words) for words in x])
+    vocabulary = set(string)
 
-#  初始化模型
-model= SVC(kernel = 'rbf',verbose=True)
-#  进行训练
-model.fit(train_vec,y)
-joblib.dump(model, "svm_model.pkl")
-print("done\n")
+    # 字典列表
+    word_dictionary = {word: i+1 for i, word in enumerate(vocabulary)} # 列出可遍历的索引序列
+    with open('F:/word_dict.pk', 'wb') as f:
+        pickle.dump(word_dictionary, f) # 将序列化后的对象以二进制写入文件
+    inverse_word_dictionary = {i+1: word for i, word in enumerate(vocabulary)} # 反向
 
-#对店铺评论进行情感判断
-def svm_predict():
-    with open("F:/此处为要分析的店铺评论文件", 'r', encoding="gb18030") as csvfile:
-        reader = csv.DictReader(csvfile)
-        model = joblib.load('svm_model.pkl')
-        comment_sentiment = []
-        i = num = m = n = h = score = 0
-        for row in reader:
-            words = jieba.lcut(str(row['comment']))
-            words_vec = total_vec(words)
-            result = model.predict(words_vec)
+    label_dictionary = {label: i for i, label in enumerate(labels)}
+    with open('F:/label_dict.pk', 'wb') as f:
+        pickle.dump(label_dictionary, f)
+    output_dictionary = {i: labels for i, labels in enumerate(labels)}
 
-            #  comment_sentiment.append('积极' if int(result[0]) else '消极')
-            # 实时返回积极消极结果
-            
-            #  总数统计
-            num = num+1
-            score+=int(row['star'])
-            # 实际积极情感
-            if int(row['star'])==50 or int(row['star'])==40 :
-                m=m+1
-            # 实际消极情感
-            if int(row['star'])==10:
-                n=n+1
-            # 预测积极情感
-            if int(result[0]) == 1 :
-                i=i+1
-                print(row['comment'] + '积极' + row['star'])
-                print('\n')
-            # 预测消极情感
-            elif int(result[0]) == 0:
-                h=h+1
-                print(row['comment']+'消极'+row['star'])
-                print('\n')
+    vocab_size = len(word_dictionary.keys()) # 词汇表大小
+    label_size = len(label_dictionary.keys()) # 标签类别数量
 
-    print('情感积极倾向是'+str(m/num))
-    print('情感积极倾向预测是'+str(i/num))
-    print('平均分是'+str(score/num/50))
+    # 序列填充，按input_shape填充，长度不足的按0补充，预处理
+    x = [[word_dictionary[word] for word in sent] for sent in df['comment']]
+    x = pad_sequences(maxlen=input_shape, sequences=x, padding='post', value=0)
+    y = [[label_dictionary[sent]] for sent in df['star']]
+    y = [np_utils.to_categorical(label, num_classes=label_size) for label in y] # 将类别向量转换为二进制（只有0和1）的矩阵类型表示
+    y = np.array([list(_[0]) for _ in y])
 
-svm_predict()
+    return x, y, output_dictionary, vocab_size, label_size, inverse_word_dictionary
+
+# 创建深度学习模型
+def create_LSTM(n_units, input_shape, output_dim, filepath):
+    x, y, output_dictionary, vocab_size, label_size, inverse_word_dictionary = load_data(filepath)
+    model = Sequential()
+    # 使用add来堆叠模型
+    # input_dim即字典长度=输入数据最大下标+1，output_dim为全连接嵌入的维度
+    model.add(Embedding(input_dim=vocab_size + 1, output_dim=output_dim,
+                        input_length=input_shape, mask_zero=True))
+    model.add(LSTM(n_units, input_shape=(x.shape[0], x.shape[1])))
+    model.add(Dropout(0.2)) # 每轮迭代时每五个输入值就会被随机抛弃一个。
+    model.add(Dense(label_size, activation='softmax'))
+    # 配置学习过程
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+    plot_model(model, to_file='F:/model_lstm.png', show_shapes=True)
+    model.summary()
+    return model
+
+# 模型训练
+def model_train(input_shape, filepath, model_save_path):
+
+    # 将数据集分为训练集和测试集比例为9:1
+
+    x, y, output_dictionary, vocab_size, label_size, inverse_word_dictionary = load_data(filepath, input_shape)
+    train_x, test_x, train_y, test_y = train_test_split(x, y, test_size = 0.1, random_state = 42)
+
+    # 模型输入参数
+    n_units = 100
+    batch_size = 32 # 通常取2的n次方
+    epochs = 5 # 一个epoch等于使用全部样本训练一次
+    output_dim = 20
+
+    # 模型训练
+    lstm_model = create_LSTM(n_units, input_shape, output_dim, filepath)
+    lstm_model.fit(train_x, train_y, epochs=epochs, batch_size=batch_size, verbose=1)
+
+    # 模型保存
+    lstm_model.save(model_save_path)
+
+    N = test_x.shape[0]  # 测试的条数
+    predict = []
+    label = []
+    for start, end in zip(range(0, N, 1), range(1, N+1, 1)):
+        sentence = [inverse_word_dictionary[i] for i in test_x[start] if i != 0]
+        y_predict = lstm_model.predict(test_x[start:end])
+        label_predict = output_dictionary[np.argmax(y_predict[0])]
+        label_true = output_dictionary[np.argmax(test_y[start:end])]
+        print(''.join(sentence), label_true, label_predict) # 输出预测结果
+        predict.append(label_predict)
+        label.append(label_true)
+
+    acc = accuracy_score(predict, label) # 预测准确率
+    print('模型在测试集上的准确率为: %s.' % acc)
+
+if __name__ == '__main__':
+    filepath = 'F:/hebing.csv'
+    input_shape = 180
+    model_save_path = 'F:/corpus_model.h5'
+    model_train(input_shape, filepath, model_save_path)
