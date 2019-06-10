@@ -3,18 +3,19 @@ import requests
 import random
 import csv
 import logging
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO)
 
-idlist=[186191569,188908342]
+df = pd.read_csv('F:/日料.csv')
+idlist=list(df['ID'].unique())
 
 def Get_json(m):
     #  获取json数据
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36'
     }
-    url = 'https://www.meituan.com/meishi/api/poi/getMerchantComment?uuid=095e5a%7B%7Dd417a92d9.1526123380.1.0.0&platform=1&partner=126&originUrl=https%3A%2F%2Fwww.meituan.com%2Fmeishi%2F71790667%2F&riskLevel=1&optimusCode=1&id={ID}&userId=&offset=0&pageSize=10&sortType=1'.format(ID=idlist[m]
-    )
+    url = 'https://www.meituan.com/meishi/api/poi/getMerchantComment?uuid=095e5a{}d417a92d9.1526123380.1.0.0&platform=1&partner=126&originUrl=https%3A%2F%2Fwww.meituan.com%2Fmeishi%2F71790667%2F&riskLevel=1&optimusCode=1&id={ID}&userId=&offset=0&pageSize=10&sortType=1'.format(random.randint(10000, 99999),  ID=idlist[m])
     response = requests.get(url, timeout=10, headers=headers)
     res = json.loads(response.text)
     return res
