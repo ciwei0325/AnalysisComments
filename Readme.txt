@@ -17,5 +17,5 @@
       https://keras.io/zh/
 https://cloud.tencent.com/developer/article/1119793等
 
-![Image text](photos/1.png)
+![Image text](https://meituan-1304943798.cos.ap-nanjing.myqcloud.com/1.png)
                
