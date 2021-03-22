@@ -17,5 +17,5 @@
       https://keras.io/zh/
 https://cloud.tencent.com/developer/article/1119793等
 
- ![image](https://github.com/ciwei0325/AnalysisComments/blob/master/photos/1.png)
+photos/1.png
                
